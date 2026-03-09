@@ -1,8 +1,8 @@
 using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, ColorSchemes, SparseArrays
 @time begin
 # Parameters for computations
-D_i= 0.01
-M_i = 0.1
+D_i= 1e-3
+M_i = 0
 D_c = D_i #0.1#1e-0 #Diffusion Coefficient for Consensus makers
 D_g = D_i #1e-13 #3 #Diffusion Coefficient for Gridlockers
 D_z = D_i #0.1#1e-0 #Diffusion Coefficient for Zealots
@@ -12,30 +12,28 @@ m_g =  M_i# #Migration rate for Gridlockers
 m_z =  M_i #1e-0 # #Migration rate for Zealots Party 1
 m_z2 = M_i# #Migration rate for Zealots Party 2
 V= 1 #Social Imitation
-λ= 1 #Economic preference
-b=1 #public good benefit
-k=0 #public good cost
-s= 1/2 #Spillovers to the other neighbours
+λ= 0 #Economic preference
+s= 0 #Spillovers to the other neighbours
 L = 10 #Length of domain     
 Nx, Ny = 10, 10 #Number of discretization points in either direction
 dx = L / (Nx - 1) #Chop up x equally
 dy = L / (Ny - 1) #Chop up y equally
 x = range(0, L, length=Nx) # X size
 y = range(0, L, length=Ny) # y size 
-tfinal=250.0 #Final time
+tfinal=25.0 #Final time
 X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
 
 #Initial distribution/ conditions
-N=Nx
-c₀ = rand(N,N) #gaussian(X, Y, 0.5, 0.5, var) #initial distribution for Consensus makers
+N=Nx #Size  of the domian, to place strategies 
+c₀ = rand(N,N) #initial random distribution for Consensus makers
 #c₀ = clamp.(c₀, 0, .1) #Control the bounds of initial conditions
-g₀ = rand(N,N) #gaussian(X, Y, 0.5, 0.4, var) #initial distribution for Gridlockers
+g₀ = rand(N,N) #initial random distribution for Gridlockers
 #g₀ = clamp.(g₀, 0, 0.15) #Control the bounds of initial conditions, we can change these around to see what will happen
-z1₀ = rand(N,N) #gaussian(X, Y, 0.5, 0.5, var) #initial distribution for Zealots Party 1
+z1₀ = rand(N,N) #initial random distribution for Zealots Party 1
 #z1₀ = clamp.(z1₀, 0, 0.1) #Control the bounds of initial conditions, we can change these around to see what will happen
-z2₀ = rand(N,N) #gaussian(X, Y, 0.5, 0.5, var) #initial distribution for Zealots Party 2
+z2₀ = rand(N,N)  #initial random distribution for Zealots Party 2
 #z2₀ = clamp.(z2₀, 0, 0.1) #Control the bounds of initial conditions, we can change these around to see what will happen
-τ= c₀ .+ g₀ .+ z1₀ .+ z2₀
+τ= c₀ .+ g₀ .+ z1₀ .+ z2₀ #Sum of populations
 c₀=c₀ ./ τ #Normalize initial conditions
 g₀=g₀ ./ τ
 z1₀=z1₀ ./ τ
@@ -75,6 +73,7 @@ function laplacian(U)
     end
     return L
 end
+
 #Construct gradient for later use
 function Gradient(u, dx, dy)
     Nx, Ny = size(u)
@@ -108,37 +107,24 @@ end
 # Returns the sum of the four neighbors (with periodic boundary conditions)
 function positive_spillover(v, i, j)
     Nx, Ny = size(v)
-    ip1 = mod(i, Nx) + 1  
-    im1 = mod(i - 2, Nx) + 1  
-    jp1 = mod(j, Ny) + 1  
-    jm1 = mod(j - 2, Ny) + 1  
-    return v[im1, j] + v[ip1, j] + v[i, jm1] + v[i, jp1]
+    ip1 = mod(i, Nx) + 1  #Spillover from the South neighbor
+    im1 = mod(i - 2, Nx) + 1  #Spillover from the North neighbor
+    jp1 = mod(j, Ny) + 1  #Spillover from the East neighbor
+    jm1 = mod(j - 2, Ny) + 1  #Spillover from the West neighbor
+    return v[im1, j] + v[ip1, j] + v[i, jm1] + v[i, jp1] #Sum of spillovers from the four neighbors
 end
 
-# Compute the sum of votes in the N, S, E, W directions for a focal node (i, j), minus the focal node's own vote
-# v: 2D array of votes, i: row index, j: column index
-# Returns the sum of the four neighbors minus the focal node (with periodic boundary conditions)
-function negative_spillover(v, i, j)
-    Nx, Ny = size(v)
-    ip1 = mod(i, Nx) + 1  #South neighbor
-    im1 = mod(i - 2, Nx) + 1  #North neighbor
-    jp1 = mod(j, Ny) + 1  #East neighbor
-    jm1 = mod(j - 2, Ny) + 1  #West neighbor
-    return v[im1, j] + v[ip1, j] + v[i, jm1] + v[i, jp1] - v[i, j]
-end
 # Fitness functions
-Fitness_c(v) =  (1 .+ cos.(2 .* pi .* v)) ./ 2 #4 .* (v .- 0.5).^2 #Strategy fitness for Consensus makers
-Fitness_g(v) = (1 .- cos.(2 .* pi .* v)) ./ 2#1 .- 4 .* (v .- 0.5).^2 #Strategy fitness for Gridlockers
-Fitness_z1(v) = (1 .- cos.(pi .* v)) ./2 #(v).^2 #Strategy fitness for Zealots party 1
-Fitness_z2(v) = (1 .+ cos.(pi .* v)) ./2 #(1 .- (v)).^2 #Strategy fitness for Zealots party 2
+Fitness_c(v) =  (1 .+ cos.(2 .* pi .* v)) ./ 2 #Strategy fitness for Consensus makers
+Fitness_g(v) = (1 .- cos.(2 .* pi .* v)) ./ 2 #Strategy fitness for Gridlockers
+Fitness_z1(v) = (1 .- cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 1
+Fitness_z2(v) = (1 .+ cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 2
 
 #Economic Utility functions 
 Utility_c(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_c(v)
 Utility_g(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_g(v)
 Utility_z1(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover)) .+ (1-λ).*Fitness_z1(v)
 Utility_z2(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_z2(v)
-
-
 
 # Initial condition
 u0 = pack(c₀, g₀, z1₀, z2₀, v_c₀, v_g₀)
@@ -191,12 +177,8 @@ function DAE!(du, u, p, t)
     du_g = D_g .* laplacian(g) .-m_g .*div_g_grad_ug .+ V.* (g .* c .* (F_g .- F_c) + g .* z .* (F_g .- F_z) + g .* z2 .* (F_g .- F_z2))
     du_z = D_z .* laplacian(z) .-m_z .*div_z1_grad_uz1 .+ V.* (z .* c .* (F_z .- F_c) + z .* g .* (F_z .- F_g))
     du_z2 = D_z2 .* laplacian(z2) .-m_z2 .*div_z2_grad_uz2 .+ V.* (z2 .* c .* (F_z2 .- F_c) + z2 .* g .* (F_z2 .- F_g))
-    # Partial Differential equations
-    # du_c = D_c .* laplacian(c) .-m_c .*((Gradient(c, dx, dy)[1] .+ Gradient(c, dx, dy)[2]).* (grad_uc_x.+grad_uc_y).+c.*laplacian(u_c)) .+ V.* (c .* g .* (F_c .- F_g) + c .* z .* (F_c .- F_z) + c .* z2 .* (F_c .- F_z2))
-    # du_g = D_g .* laplacian(g) .-m_g .*((Gradient(g, dx, dy)[1] .+ Gradient(g, dx, dy)[2]).* (grad_ug_x.+grad_ug_y).+c.*laplacian(u_g)) .+ V.* (g .* c .* (F_g .- F_c) + g .* z .* (F_g .- F_z) + g .* z2 .* (F_g .- F_z2))
-    # du_z = D_z .* laplacian(z) .-m_z .*((Gradient(z, dx, dy)[1] .+ Gradient(z, dx, dy)[2]).* (grad_uz1_x.+grad_uz1_y).+c.*laplacian(u_z1)) .+ V.* (z .* c .* (F_z .- F_c) + z .* g .* (F_z .- F_g))
-    # du_z2 = D_z2 .* laplacian(z2) .-m_z2 .*((Gradient(z2, dx, dy)[1] .+ Gradient(z2, dx, dy)[2]).* (grad_uz2_x.+grad_uz2_y).+c.*laplacian(u_z2)) .+ V.* (z2 .* c .* (F_z2 .- F_c) + z2 .* g .* (F_z2 .- F_g))
-    # Algebraic equations
+
+# Algebraic equations
     du_v_c = (1 .- v_c) .* v.^2 .- v_c .* (1 .- v).^2
     du_v_g = (1 .- v_g) .* (1 .- v).^2 .- v_g .* v.^2
     # du_v_c = clamp.(du_v_c, 0, 1)
@@ -205,10 +187,9 @@ function DAE!(du, u, p, t)
 end
 
 # Mass matrix: 1 for c,g,z , 0 for v_c,v_g 
-# function mass_matrix(u, p, t)
 # M = diagm(vcat(ones(4*Nx*Ny), zeros(2*Nx*Ny)))
 # M = diagm(vcat(ones(6*Nx*Ny))) #Used for quick comps
-M = spdiagm(0 => ones(6*Nx*Ny)) #Need to use for large final solutions, takes longer to compute but better for memory
+M = spdiagm(0 => ones(6*Nx*Ny)) #larger but faster than diagm
 u0 = pack(c₀, g₀, z1₀, z2₀, v_c₀, v_g₀)
 du0 = zeros(size(u0))
 
@@ -217,15 +198,6 @@ prob = ODEProblem(DAEfunc, u0, tspan)
 sol = solve(prob, RadauIIA5(), saveat=0.01, reltol=1e-12, abstol=1e-12) #Different solvers:RadauIIA5,Rodas5P,Rodas4,ROS34PW2,ROS34PW3,Trapezoid
 
 # HEATMAPS: Plot results at final time 
-# percent_change_heatmap_population = []
-# for idx in 1:length(sol)
-#     c, g, z, z2, v_c, v_g = unpack(sol[idx])
-#     population = c .+ g .+ z .+ z2
-#     current_heatmap_population = population ./ total_population
-#     percent_change = 100 .* (current_heatmap_population .-τ) ./ τ
-#     push!(percent_change_heatmap_population, percent_change)
-# end
-
 fontsize=14
 c, g, z, z2, v_c, v_g = unpack(sol[end]) #computations from the end of the simulation, we could pull these at any other times
 population = c .+ g .+ z .+ z2 #Compute population, this is a matrix
@@ -245,17 +217,23 @@ p5 = heatmap(x, y, heatmap_population',  aspect_ratio=1,colorbar=false, clims=cl
 p6 = heatmap(x, y, v',  aspect_ratio=1,color=:viridis, colorbar=false, clims=clims) # clims=climscolor=:balance,
 heatmap_figure = plot(p1, p2, p3, p4, p5, p6, layout=(3,3), size=(1400, 1500),colorbar=true, titlefontsize=fontsize, guidefontsize=fontsize, tickfontsize=fontsize, plot_title="Solutions at final time $tfinal")
 display(plot(p1, axis=false, framestyle=:none,ticks=false, size=(625, 625))) #Consensus makers
-#savefig("DirectedMovementHeat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,b=$b,k=$k,T=$tfinal.pdf")
+#savefig("DirectedMovementHeat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Heat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p2, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Gridlockers
-#savefig("DirectedMovementHeat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,b=$b,k=$k,T=$tfinal.pdf")
+#savefig("DirectedMovementHeat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Heat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p3, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 1
-#savefig("DirectedMovementHeat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,b=$b,k=$k,T=$tfinal.pdf")
+#savefig("DirectedMovementHeat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Heat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p4, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 2
-#savefig("DirectedMovementHeat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,b=$b,k=$k,T=$tfinal.pdf")
+#savefig("DirectedMovementHeat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Heat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p5, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Population
-#savefig("DirectedMovementHeat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,b=$b,k=$k,T=$tfinal.pdf")
+#savefig("DirectedMovementHeat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Heat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p6, axis=false, framestyle=:none, ticks=false, size=(625,625))) #Vote
-#savefig("DirectedMovementHeat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,b=$b,k=$k,T=$tfinal.pdf")
+#savefig("DirectedMovementHeat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Heat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(heatmap_figure)#savefig("Heatmap_Clean_DifferentD_EvenIC_Finaltime=$tfinal.pdf")
 
 # TIME SERIES: Compute averages over the domain at each time step
@@ -282,7 +260,7 @@ plot!(time_steps, average_v,lw=8)
 # plot!(time_steps, average_Fitness_z2,lw=8)
 #plot!(time_steps, ts_max_pop, label="Max Population",lw=3)
 display(time_series)
-#savefig("Spillover_TimeSeries_M_c=$m_c,D_c=$D_c,lambda=$λ,s=$s,b=$b,k=$k,T=$tfinal.pdf")
+#savefig("Spillover_TimeSeries_M_c=$m_c,D_c=$D_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 
 # ## Time series fitness
 # time_series_fit = plot(time_steps, average_Fitness_c, xlabel="Time", ylabel="Mean",lw=8, xlabelfontsize=20, ylabelfontsize=20,

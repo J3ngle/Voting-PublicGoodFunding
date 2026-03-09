@@ -1,8 +1,8 @@
 using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, ColorSchemes
 @time begin
 # Parameters for computations
-D_i= 0.01
-M_i = 0.01
+D_i= 1e-3
+M_i = 1e-3
 D_c = D_i#1e-0 #1e-3 #Diffusion Coefficient for Consensus makers
 D_g = D_i#1e-10 #1e-3 #3 #Diffusion Coefficient for Gridlockers
 D_z = D_i#1e-0 #1e-3 #Diffusion Coefficient for Zealots
@@ -102,17 +102,30 @@ function Gradient(u, dx, dy)
     return [grad_x, grad_y]
 end
 
+# Compute the sum of votes in the N, S, E, W directions for a focal node (i, j)
+# v: 2D array of votes, i: row index, j: column index
+# Returns the sum of the four neighbors (with periodic boundary conditions)
+function positive_spillover(v, i, j)
+    Nx, Ny = size(v)
+    ip1 = mod(i, Nx) + 1  #Spillover from the South neighbor
+    im1 = mod(i - 2, Nx) + 1  #Spillover from the North neighbor
+    jp1 = mod(j, Ny) + 1  #Spillover from the East neighbor
+    jm1 = mod(j - 2, Ny) + 1  #Spillover from the West neighbor
+    return v[im1, j] + v[ip1, j] + v[i, jm1] + v[i, jp1] #Sum of spillovers from the four neighbors
+end
+
 # Fitness functions
-Fitness_c(v) =  (1 .+ cos.(2 .* pi .* v)) ./ 2 #4 .* (v .- 0.5).^2 #Strategy fitness for Consensus makers
-Fitness_g(v) = (1 .- cos.(2 .* pi .* v)) ./ 2#1 .- 4 .* (v .- 0.5).^2 #Strategy fitness for Gridlockers
-Fitness_z1(v) = (1 .- cos.(pi .* v)) ./2 #(v).^2 #Strategy fitness for Zealots party 1
-Fitness_z2(v) = (1 .+ cos.(pi .* v)) ./2 #(1 .- (v)).^2 #Strategy fitness for Zealots party 2
+Fitness_c(v) =  (1 .+ cos.(2 .* pi .* v)) ./ 2 #Strategy fitness for Consensus makers
+Fitness_g(v) = (1 .- cos.(2 .* pi .* v)) ./ 2 #Strategy fitness for Gridlockers
+Fitness_z1(v) = (1 .- cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 1
+Fitness_z2(v) = (1 .+ cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 2
 
 #Economic Utility functions 
-Utility_c(v) = λ .* ((1-s)*b .* v .- k .* v .+ s*b) .* v .+ (1-λ).*Fitness_c(v)
-Utility_g(v) = λ .* ((1-s)*b .* v .- k .* v .+ s*b) .* v .+ (1-λ).*Fitness_g(v)
-Utility_z1(v) = λ .* ((1-s)*b .* v .- k .* v .+ s*b) .* v .+ (1-λ).*Fitness_z1(v)
-Utility_z2(v) = λ .* ((1-s)*b .* v .- k .* v .+ s*b) .* v .+ (1-λ).*Fitness_z2(v)
+Utility_c(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_c(v)
+Utility_g(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_g(v)
+Utility_z1(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover)) .+ (1-λ).*Fitness_z1(v)
+Utility_z2(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_z2(v)
+
 
 # Initial condition
 u0 = pack(c₀, g₀, z1₀, z2₀, v_c₀, v_g₀)
@@ -130,30 +143,20 @@ function rd_system!(du, u, p, t)
     F_z  = Fitness_z1(v)
     F_z2 = Fitness_z2(v)
 
-    u_c  = Utility_c(v)
-    u_g  = Utility_g(v)
-    u_z1 = Utility_z1(v)
-    u_z2 = Utility_z2(v)
+    # Compute spillover_value for each node and pass to Utility functions
+    spillover_v = [positive_spillover(v, i, j) for i in 1:Nx, j in 1:Ny]
+    u_c   = [Utility_c(v[i, j], spillover_v[i, j]) for i in 1:Nx, j in 1:Ny]
+    u_g   = [Utility_g(v[i, j], spillover_v[i, j]) for i in 1:Nx, j in 1:Ny]
+    u_z1  = [Utility_z1(v[i, j], spillover_v[i, j]) for i in 1:Nx, j in 1:Ny]
+    u_z2  = [Utility_z2(v[i, j], spillover_v[i, j]) for i in 1:Nx, j in 1:Ny]
 
-    # gradients of utilities
-    grad_uc_x, grad_uc_y = Gradient(u_c, dx, dy)
-    grad_ug_x, grad_ug_y = Gradient(u_g, dx, dy)
-    grad_uz1_x, grad_uz1_y = Gradient(u_z1, dx, dy)
-    grad_uz2_x, grad_uz2_y = Gradient(u_z2, dx, dy)
-
-    # divergence terms ∇·(c ∇u_c) etc.
-    div_c_grad_uc = Gradient(c .* grad_uc_x, dx, dy)[1] .+ Gradient(c .* grad_uc_y, dx, dy)[2]
-    div_g_grad_ug = Gradient(g .* grad_ug_x, dx, dy)[1] .+ Gradient(g .* grad_ug_y, dx, dy)[2]
-    div_z1_grad_uz1 = Gradient(z .* grad_uz1_x, dx, dy)[1] .+ Gradient(z .* grad_uz1_y, dx, dy)[2]
-    div_z2_grad_uz2 = Gradient(z2 .* grad_uz2_x, dx, dy)[1] .+ Gradient(z2 .* grad_uz2_y, dx, dy)[2]
-
-    # PDE 
+    # PDE, Laplacian + replicator. Distant movement added at the end
     du_c  = D_c .* laplacian(c) .+ (c .* g .* (F_c .- F_g)  .+ c .* z .* (F_c .- F_z)  .+ c .* z2 .* (F_c .- F_z2))
     du_g  = D_g .* laplacian(g) .+ (g .* c .* (F_g .- F_c)  .+ g .* z .* (F_g .- F_z)  .+ g .* z2 .* (F_g .- F_z2))
     du_z  = D_z .* laplacian(z) .+ (z .* c .* (F_z .- F_c)  .+ z .* g .* (F_z .- F_g))
     du_z2 = D_z2 .* laplacian(z2) .+ (z2 .* c .* (F_z2 .- F_c) .+ z2 .* g .* (F_z2 .- F_g))
 
-    # Movement for c: each cell moves toward the cell j
+    # Movement for c: each cell moves to the cell j
     T = eltype(c)
     move_gain = zeros(T, Nx, Ny)
     move_loss = zeros(T, Nx, Ny)
@@ -184,7 +187,7 @@ function rd_system!(du, u, p, t)
     end
 
     # Apply movement to du_c (gain minus loss)
-    du_c .= du_c .+ m_c .* (move_gain .- move_loss)
+    du_c .= du_c .+ (move_gain .- move_loss)
 
     # Movement for g 
     move_gain_g = zeros(T, Nx, Ny)
@@ -213,7 +216,7 @@ function rd_system!(du, u, p, t)
             move_gain_g[maxi, maxj] += flux
         end
     end
-    du_g .= du_g .+ m_g .* (move_gain_g .- move_loss_g)
+    du_g .= du_g .+ (move_gain_g .- move_loss_g)
 
     # Movement for z (zealots 1)
     move_gain_z = zeros(T, Nx, Ny)
@@ -270,7 +273,7 @@ function rd_system!(du, u, p, t)
             move_gain_z2[maxi, maxj] += flux
         end
     end
-    du_z2 .= du_z2 .+ m_z2 .* (move_gain_z2 .- move_loss_z2)
+    du_z2 .= du_z2 .+ (move_gain_z2 .- move_loss_z2)
     # algebraic dynamics for v_c, v_g
     du_v_c = (1 .- v_c) .* v.^2 .- v_c .* (1 .- v).^2
     du_v_g = (1 .- v_g) .* (1 .- v).^2 .- v_g .* v.^2
@@ -282,7 +285,7 @@ end
 problem = ODEProblem(rd_system!, u0, tspan)
 sol = solve(problem, RadauIIA5(), saveat=0.01, reltol=1e-12, abstol=1e-12)
 
-## HEARMAPS
+## HEATMAPS
 fontsize=14
 c, g, z, z2, v_c, v_g = unpack(sol[end]) #computations from the end of the simulation, we could pull these at any other times
 population = c .+ g .+ z .+ z2 #Compute population, this is a matrix
