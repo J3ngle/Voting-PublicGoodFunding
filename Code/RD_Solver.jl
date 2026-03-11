@@ -1,8 +1,8 @@
 using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, ColorSchemes, SparseArrays
 @time begin
 # Parameters for computations
-D_i= 1e-3
-M_i = 0
+D_i= 0.01
+M_i = 0.01
 D_c = D_i #0.1#1e-0 #Diffusion Coefficient for Consensus makers
 D_g = D_i #1e-13 #3 #Diffusion Coefficient for Gridlockers
 D_z = D_i #0.1#1e-0 #Diffusion Coefficient for Zealots
@@ -73,35 +73,25 @@ function laplacian(U)
     end
     return L
 end
-
-#Construct gradient for later use
+#Gradient function
 function Gradient(u, dx, dy)
     Nx, Ny = size(u)
-    T = eltype(u)  # Get the element type (Float64 or Dual)
+    T = eltype(u)
     grad_x = zeros(T, Nx, Ny)
-    grad_y = zeros(T, Nx, Ny) 
-    # Compute gradient in x direction using central difference
-    for i in 2:Nx-1
-        for j in 1:Ny
-            grad_x[i, j] = (u[i+1, j] - u[i-1, j]) / (2dx)
-        end
+    grad_y = zeros(T, Nx, Ny)
+    #Boundary conditions are handled by the mod functions
+    for i in 1:Nx, j in 1:Ny
+        ip1 = mod(i, Nx) + 1
+        im1 = mod(i-2, Nx) + 1
+        jp1 = mod(j, Ny) + 1
+        jm1 = mod(j-2, Ny) + 1
+        #Central difference for interior points
+        grad_x[i,j] = (u[ip1,j] - u[im1,j])/(2dx)
+        grad_y[i,j] = (u[i,jp1] - u[i,jm1])/(2dy)
     end
-    # Forward/backward differences at boundaries (No end points)
-    grad_x[1, :] = (u[2, :] - u[1, :]) / dx
-    grad_x[end, :] = (u[end, :] - u[end-1, :]) / dx
-    # Compute gradient in y direction using central difference
-    for i in 1:Nx
-        for j in 2:Ny-1
-            grad_y[i, j] = (u[i, j+1] - u[i, j-1]) / (2dy)
-        end
-    end
-    # Forward/backward differences at boundaries
-    grad_y[:, 1] = (u[:, 2] - u[:, 1]) / dy
-    grad_y[:, end] = (u[:, end] - u[:, end-1]) / dy
-    #Store in both x and y directions
-    return [grad_x, grad_y]
-end
 
+    return grad_x, grad_y
+end
 # Compute the sum of votes in the N, S, E, W directions for a focal node (i, j)
 # v: 2D array of votes, i: row index, j: column index
 # Returns the sum of the four neighbors (with periodic boundary conditions)
@@ -260,6 +250,9 @@ plot!(time_steps, average_v,lw=8)
 # plot!(time_steps, average_Fitness_z2,lw=8)
 #plot!(time_steps, ts_max_pop, label="Max Population",lw=3)
 display(time_series)
+
+population_check = average_c .+ average_g .+ average_z .+ average_z2
+plot(time_steps, population_check)
 #savefig("Spillover_TimeSeries_M_c=$m_c,D_c=$D_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 
 # ## Time series fitness
