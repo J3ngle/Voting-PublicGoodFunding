@@ -1,8 +1,8 @@
 using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, ColorSchemes, SparseArrays
 @time begin
 # Parameters for computations
-D_i= 0.01
-M_i = 0.01
+D_i= 0
+M_i = 1e-2
 D_c = D_i #0.1#1e-0 #Diffusion Coefficient for Consensus makers
 D_g = D_i #1e-13 #3 #Diffusion Coefficient for Gridlockers
 D_z = D_i #0.1#1e-0 #Diffusion Coefficient for Zealots
@@ -11,9 +11,9 @@ m_c = M_i #1e-10 # #Migration rate for Consensus makers
 m_g =  M_i# #Migration rate for Gridlockers
 m_z =  M_i #1e-0 # #Migration rate for Zealots Party 1
 m_z2 = M_i# #Migration rate for Zealots Party 2
-V= 1 #Social Imitation
-λ= 0 #Economic preference
+λ= 1/2 #Economic preference
 s= 0 #Spillovers to the other neighbours
+tau =0
 L = 10 #Length of domain     
 Nx, Ny = 10, 10 #Number of discretization points in either direction
 dx = L / (Nx - 1) #Chop up x equally
@@ -111,10 +111,10 @@ Fitness_z1(v) = (1 .- cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 1
 Fitness_z2(v) = (1 .+ cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 2
 
 #Economic Utility functions 
-Utility_c(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_c(v)
-Utility_g(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_g(v)
-Utility_z1(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover)) .+ (1-λ).*Fitness_z1(v)
-Utility_z2(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_z2(v)
+Utility_c(v, positive_spillover) = λ .* ((1-s-tau)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_c(v)
+Utility_g(v, positive_spillover) = λ .* ((1-s-tau)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_g(v)
+Utility_z1(v, positive_spillover) = λ .* ((1-s-tau)*v+(s/4)*(positive_spillover)) .+ (1-λ).*Fitness_z1(v)
+Utility_z2(v, positive_spillover) = λ .* ((1-s-tau)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_z2(v)
 
 # Initial condition
 u0 = pack(c₀, g₀, z1₀, z2₀, v_c₀, v_g₀)
@@ -163,10 +163,10 @@ function DAE!(du, u, p, t)
     div_z2_grad_uz2_y= Gradient(z2 .* grad_uz2_y, dx, dy)[2] #y direction
     div_z2_grad_uz2= div_z2_grad_uz2_x .+ div_z2_grad_uz2_y #total divergence
     # # Partial Differential equations
-    du_c = D_c .* laplacian(c) .-m_c .*div_c_grad_uc .+ V.* (c .* g .* (F_c .- F_g) + c .* z .* (F_c .- F_z) + c .* z2 .* (F_c .- F_z2))
-    du_g = D_g .* laplacian(g) .-m_g .*div_g_grad_ug .+ V.* (g .* c .* (F_g .- F_c) + g .* z .* (F_g .- F_z) + g .* z2 .* (F_g .- F_z2))
-    du_z = D_z .* laplacian(z) .-m_z .*div_z1_grad_uz1 .+ V.* (z .* c .* (F_z .- F_c) + z .* g .* (F_z .- F_g))
-    du_z2 = D_z2 .* laplacian(z2) .-m_z2 .*div_z2_grad_uz2 .+ V.* (z2 .* c .* (F_z2 .- F_c) + z2 .* g .* (F_z2 .- F_g))
+    du_c = D_c .* laplacian(c) .-m_c .*div_c_grad_uc .+  (c .* g .* (F_c .- F_g) + c .* z .* (F_c .- F_z) + c .* z2 .* (F_c .- F_z2))
+    du_g = D_g .* laplacian(g) .-m_g .*div_g_grad_ug .+  (g .* c .* (F_g .- F_c) + g .* z .* (F_g .- F_z) + g .* z2 .* (F_g .- F_z2))
+    du_z = D_z .* laplacian(z) .-m_z .*div_z1_grad_uz1 .+  (z .* c .* (F_z .- F_c) + z .* g .* (F_z .- F_g))
+    du_z2 = D_z2 .* laplacian(z2) .-m_z2 .*div_z2_grad_uz2 .+ (z2 .* c .* (F_z2 .- F_c) + z2 .* g .* (F_z2 .- F_g))
 
 # Algebraic equations
     du_v_c = (1 .- v_c) .* v.^2 .- v_c .* (1 .- v).^2
@@ -196,7 +196,7 @@ c=c ./ population #Normalize c
 g=g ./ population #Normalize g
 z=z ./ population #Normalize z
 z2=z2 ./ population #Normalize z2
-heatmap_population = population  ./ maximum(population) #Normalize population
+heatmap_population = population  #./ maximum(population) #Normalize population
 v = (c .* v_c .+ g .* v_g .+ z) #Compute v at the end
 clims = (0, 1) #Color limits for heatmaps
 p1 = heatmap(x, y, c',  aspect_ratio=1,colorbar=false, clims=clims)# clims=clims
@@ -207,23 +207,23 @@ p5 = heatmap(x, y, heatmap_population',  aspect_ratio=1,colorbar=false, clims=cl
 p6 = heatmap(x, y, v',  aspect_ratio=1,color=:viridis, colorbar=false, clims=clims) # clims=climscolor=:balance,
 heatmap_figure = plot(p1, p2, p3, p4, p5, p6, layout=(3,3), size=(1400, 1500),colorbar=true, titlefontsize=fontsize, guidefontsize=fontsize, tickfontsize=fontsize, plot_title="Solutions at final time $tfinal")
 display(plot(p1, axis=false, framestyle=:none,ticks=false, size=(625, 625))) #Consensus makers
-#savefig("DirectedMovementHeat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("LocalMovementHeat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("SpillHeat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p2, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Gridlockers
-#savefig("DirectedMovementHeat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("LocalMovementHeat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("SpillHeat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p3, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 1
-#savefig("DirectedMovementHeat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("LocalMovementHeat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("SpillHeat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p4, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 2
-#savefig("DirectedMovementHeat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("LocalMovementHeat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("SpillHeat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p5, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Population
-#savefig("DirectedMovementHeat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("LocalMovementHeat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("SpillHeat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p6, axis=false, framestyle=:none, ticks=false, size=(625,625))) #Vote
-#savefig("DirectedMovementHeat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("LocalMovementHeat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("SpillHeat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(heatmap_figure)#savefig("Heatmap_Clean_DifferentD_EvenIC_Finaltime=$tfinal.pdf")
 
 # TIME SERIES: Compute averages over the domain at each time step
@@ -250,10 +250,12 @@ plot!(time_steps, average_v,lw=8)
 # plot!(time_steps, average_Fitness_z2,lw=8)
 #plot!(time_steps, ts_max_pop, label="Max Population",lw=3)
 display(time_series)
+savefig("MixingMovement_TimeSeries_M_c=$m_c,D_c=$D_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("1Spillover_TimeSeries_M_c=$m_c,D_c=$D_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 
+#Sanity check: Plot the average v over time
 population_check = average_c .+ average_g .+ average_z .+ average_z2
 plot(time_steps, population_check)
-#savefig("Spillover_TimeSeries_M_c=$m_c,D_c=$D_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 
 # ## Time series fitness
 # time_series_fit = plot(time_steps, average_Fitness_c, xlabel="Time", ylabel="Mean",lw=8, xlabelfontsize=20, ylabelfontsize=20,
