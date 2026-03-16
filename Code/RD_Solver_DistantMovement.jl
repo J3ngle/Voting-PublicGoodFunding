@@ -2,7 +2,7 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
 @time begin
 # Parameters for computations
 D_i= 0
-M_i = 1e-2
+M_i = 1e-3
 D_c = D_i#1e-0 #1e-3 #Diffusion Coefficient for Consensus makers
 D_g = D_i#1e-10 #1e-3 #3 #Diffusion Coefficient for Gridlockers
 D_z = D_i#1e-0 #1e-3 #Diffusion Coefficient for Zealots
@@ -11,7 +11,7 @@ m_c =  M_i#1e-10 # #Migration rate for Consensus makers
 m_g =  M_i #1e-10 # #Migration rate for Gridlockers
 m_z =  M_i #1e-10 #1e-0 # #Migration rate for Zealots Party 1
 m_z2 =  M_i#1e-10 # #Migration rate for Zealots Party 2
-λ=  1/2 #Economic preference 
+λ=  0 #Economic preference 
 s= 0 #Spillovers
 L = 10 #Length of domain    
 Nx, Ny = 10, 10 #Number of discretization points in either direction
@@ -19,7 +19,7 @@ dx = L / (Nx - 1) #Chop up x equally
 dy = L / (Ny - 1) #Chop up y equally
 x = range(0, L, length=Nx) # X size
 y = range(0, L, length=Ny) # y size 
-tfinal=25.0 #Final time
+tfinal=5.0 #Final time
 X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
 
 #Initial distribution/ conditions
@@ -157,7 +157,7 @@ function rd_system!(du, u, p, t)
             if i1 == i2 && j1 == j2
                 continue
             end
-            dx2 = (X[i1,j1] - X[i2,j2])^2 + (Y[i1,j1] - Y[i2,j2])^2
+            dx2 = 1#(X[i1,j1] - X[i2,j2])^2 + (Y[i1,j1] - Y[i2,j2])^2
             # avoid division by zero
             if dx2 == 0
                 continue
@@ -189,7 +189,7 @@ function rd_system!(du, u, p, t)
             if i1 == i2 && j1 == j2
                 continue
             end
-            dx2 = (X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
+            dx2 = 1#(X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
             if dx2 == 0
                 continue
             end
@@ -218,7 +218,7 @@ function rd_system!(du, u, p, t)
             if i1 == i2 && j1 == j2
                 continue
             end
-            dx2 = (X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
+            dx2 = 1#(X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
             if dx2 == 0
                 continue
             end
@@ -246,7 +246,7 @@ function rd_system!(du, u, p, t)
             if i1 == i2 && j1 == j2
                 continue
             end
-            dx2 = (X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
+            dx2 = 1#(X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
             if dx2 == 0
                 continue
             end
@@ -294,17 +294,17 @@ p5 = heatmap(x, y, heatmap_population',  aspect_ratio=1,colorbar=false, clims=cl
 p6 = heatmap(x, y, v',  aspect_ratio=1,color=:viridis, colorbar=false, clims=clims) # clims=climscolor=:balance,
 heatmap_figure = plot(p1, p2, p3, p4, p5, p6, layout=(3,3), size=(1400, 1500),colorbar=true, titlefontsize=fontsize, guidefontsize=fontsize, tickfontsize=fontsize, plot_title="Solutions at final time $tfinal")
 display(plot(p1, axis=false, framestyle=:none,ticks=false, size=(625, 625))) #Consensus makers
-#savefig("DistantMovement_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("DistantMovement_ConsensusMakers,tau=$tau,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p2, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Gridlockers
-#savefig("DistantMovement_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("DistantMovement_Gridlockers,tau=$tau,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p3, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 1
-#savefig("DistantMovement_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("DistantMovement_Zealots1,tau=$tau,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p4, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 2
-#savefig("DistantMovement_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("DistantMovement_Zealots2,tau=$tau,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p5, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Population
-#savefig("DistantMovement_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("DistantMovement_Population,tau=$tau,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p6, axis=false, framestyle=:none, ticks=false, size=(625,625))) #Vote
-#savefig("DistantMovement_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("DistantMovement_Vote,tau=$tau,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(heatmap_figure)#savefig("Heatmap_Clean_DifferentD_EvenIC_Finaltime=$tfinal.pdf")
 
 # TIME SERIES: Compute averages over the domain at each time step
@@ -322,7 +322,7 @@ average_v = [mean(unpack(sol[i])[5]) .* mean(unpack(sol[i])[1])  .+ mean(unpack(
 # Above computes c*v_c + g*v_g + z at each time step
 # Plot averages
 time_series = plot(time_steps, average_c, xlabel="Time", ylabel="Mean",lw=8, xlabelfontsize=20, ylabelfontsize=20,
-     titlefontsize=12, legendfontsize=12, tickfontsize=16,ylim=(0,1), xlim=(0,tfinal), legend=false) #, label="Mean Consensus Makers"
+     titlefontsize=12, legendfontsize=12, tickfontsize=16, yticks=0:0.25:1.1, xticks=0:5:tfinal, ylim=(0,1), xlim=(0,tfinal), legend=false) #, label="Mean Consensus Makers"
 plot!(time_steps, average_g,lw=8)
 plot!(time_steps, average_z,lw=8)
 plot!(time_steps, average_z2,lw=8)
@@ -331,5 +331,5 @@ plot!(time_steps, average_v,lw=8)
 # plot!(time_steps, average_Fitness_z2,lw=8)
 #plot!(time_steps, ts_max_pop, label="Max Population",lw=3)
 display(time_series)
-savefig("NewDistantMovement_TimeSeries_Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("NewDistantMovement_TimeSeries_tau=$tau,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 end
