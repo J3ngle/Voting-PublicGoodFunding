@@ -1,8 +1,8 @@
 using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, ColorSchemes
 @time begin
 # Parameters for computations
-D_i= 0
-M_i = 0.01
+D_i= 1e-3
+M_i = 0
 D_c = D_i#1e-0 #1e-3 #Diffusion Coefficient for Consensus makers
 D_g = D_i#1e-10 #1e-3 #3 #Diffusion Coefficient for Gridlockers
 D_z = D_i#1e-0 #1e-3 #Diffusion Coefficient for Zealots
@@ -20,7 +20,7 @@ dx = L / (Nx - 1) #Chop up x equally
 dy = L / (Ny - 1) #Chop up y equally
 x = range(0, L, length=Nx) # X size
 y = range(0, L, length=Ny) # y size 
-tfinal=1000.0 #Final time
+tfinal=25.0 #Final time
 X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
 
 #Initial distribution/ conditions
@@ -60,10 +60,6 @@ function unpack(u)
     return c, g, z, z2, v_c, v_g
 end
 
-#Construct laplacian in 2D
-
-#Gradient function
-
 # Compute the sum of votes in the N, S, E, W directions for a focal node (i, j)
 # v: 2D array of votes, i: row index, j: column index
 # Returns the sum of the four neighbors (with periodic boundary conditions)
@@ -74,6 +70,24 @@ function positive_spillover(v, i, j)
     jp1 = mod(j, Ny) + 1  #Spillover from the East neighbor
     jm1 = mod(j - 2, Ny) + 1  #Spillover from the West neighbor
     return v[im1, j] + v[ip1, j] + v[i, jm1] + v[i, jp1] #Sum of spillovers from the four neighbors
+end
+
+# Discrete diffusion operator (periodic boundaries) for N,S,E,W neighbors
+function discrete_diffusion(field, D)
+    Nx, Ny = size(field)
+    lap = zeros(eltype(field), Nx, Ny)
+    for i in 1:Nx, j in 1:Ny
+        #Periodic boundary conditions: if we are at the edge, wrap around to the other side
+        ip1 = i == Nx ? 1 : i + 1
+        im1 = i == 1 ? Nx : i - 1
+        jp1 = j == Ny ? 1 : j + 1
+        jm1 = j == 1 ? Ny : j - 1
+        #Called lap, similar idea to the Laplacian, but adding inflow of neighbours 
+        #Minus the outflow from the focal node
+        lap[i, j] = field[im1, j] + field[ip1, j] + field[i, jm1] + field[i, jp1] - 4 * field[i, j]
+        
+    end
+    return D .* lap
 end
 
 # Fitness functions
@@ -111,7 +125,7 @@ function rd_system!(du, u, p, t)
     u_z1  = [Utility_z1(v[i, j], spillover_v[i, j]) for i in 1:Nx, j in 1:Ny]
     u_z2  = [Utility_z2(v[i, j], spillover_v[i, j]) for i in 1:Nx, j in 1:Ny]
 
-    # PDE, Laplacian + replicator. Distant movement added at the end
+    # PDE, repolcator
     du_c  = (c .* g .* (F_c .- F_g)  .+ c .* z .* (F_c .- F_z)  .+ c .* z2 .* (F_c .- F_z2))
     du_g  = (g .* c .* (F_g .- F_c)  .+ g .* z .* (F_g .- F_z)  .+ g .* z2 .* (F_g .- F_z2))
     du_z  = (z .* c .* (F_z .- F_c)  .+ z .* g .* (F_z .- F_g))
@@ -210,6 +224,13 @@ function rd_system!(du, u, p, t)
         end
     end
     du_z2 .= du_z2 .+ (move_gain_z2 .- move_loss_z2)
+
+    # Add discrete diffusion to 
+    du_c  .+= discrete_diffusion(c, D_c)
+    du_g  .+= discrete_diffusion(g, D_g)
+    du_z  .+= discrete_diffusion(z, D_z)
+    du_z2 .+= discrete_diffusion(z2, D_z2)
+
     # algebraic dynamics for v_c, v_g
     du_v_c = (1 .- v_c) .* v.^2 .- v_c .* (1 .- v).^2
     du_v_g = (1 .- v_g) .* (1 .- v).^2 .- v_g .* v.^2
@@ -241,17 +262,17 @@ p5 = heatmap(x, y, heatmap_population',  aspect_ratio=1,colorbar=false, clims=cl
 p6 = heatmap(x, y, v',  aspect_ratio=1,color=:viridis, colorbar=false, clims=clims) # clims=climscolor=:balance,
 heatmap_figure = plot(p1, p2, p3, p4, p5, p6, layout=(3,3), size=(1400, 1500),colorbar=true, titlefontsize=fontsize, guidefontsize=fontsize, tickfontsize=fontsize, plot_title="Solutions at final time $tfinal")
 display(plot(p1, axis=false, framestyle=:none,ticks=false, size=(625, 625))) #Consensus makers
-savefig("DistantMovement_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("Figure4ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p2, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Gridlockers
-savefig("DistantMovement_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("Figure4Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p3, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 1
-savefig("DistantMovement_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("Figure4Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p4, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 2
-savefig("DistantMovement_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("Figure4Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p5, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Population
-savefig("DistantMovement_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("Figure4Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p6, axis=false, framestyle=:none, ticks=false, size=(625,625))) #Vote
-savefig("DistantMovement_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("Figure4Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(heatmap_figure)#savefig("Heatmap_Clean_DifferentD_EvenIC_Finaltime=$tfinal.pdf")
 
 # TIME SERIES: Compute averages over the domain at each time step
@@ -278,5 +299,5 @@ plot!(time_steps, average_v,lw=8)
 # plot!(time_steps, average_Fitness_z2,lw=8)
 #plot!(time_steps, ts_max_pop, label="Max Population",lw=3)
 display(time_series)
-savefig("NewDistantMovement_TimeSeries_,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("Figure4TimeSeries_,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 end
