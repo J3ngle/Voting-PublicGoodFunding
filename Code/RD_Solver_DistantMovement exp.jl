@@ -2,7 +2,7 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
 @time begin
 # Parameters for computations
 D_i= 0
-M_i = 1e-3
+M_i = 0.01
 D_c = D_i#1e-0 #1e-3 #Diffusion Coefficient for Consensus makers
 D_g = D_i#1e-10 #1e-3 #3 #Diffusion Coefficient for Gridlockers
 D_z = D_i#1e-0 #1e-3 #Diffusion Coefficient for Zealots
@@ -11,15 +11,16 @@ m_c =  M_i#1e-10 # #Migration rate for Consensus makers
 m_g =  M_i #1e-10 # #Migration rate for Gridlockers
 m_z =  M_i #1e-10 #1e-0 # #Migration rate for Zealots Party 1
 m_z2 =  M_i#1e-10 # #Migration rate for Zealots Party 2
-λ=  1 #Economic preference 
+λ= 1 #Economic preference 
 s= 0 #Spillovers
+tax = 0
 L = 10 #Length of domain    
 Nx, Ny = 10, 10 #Number of discretization points in either direction
 dx = L / (Nx - 1) #Chop up x equally
 dy = L / (Ny - 1) #Chop up y equally
 x = range(0, L, length=Nx) # X size
 y = range(0, L, length=Ny) # y size 
-tfinal=25.0 #Final time
+tfinal=1000.0 #Final time
 X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
 
 #Initial distribution/ conditions
@@ -37,7 +38,7 @@ c₀=c₀ ./ τ #Normalize initial conditions
 g₀=g₀ ./ τ
 z1₀=z1₀ ./ τ
 z2₀=z2₀ ./ τ
-v_0 = c₀ .+ 0.5*g₀ .+ z1₀ #Initial vote on the domain
+v_0 = 0.5*c₀ .+ 0.5*g₀ .+ z1₀ #Initial vote on the domain
 v_c₀= v_0.^2 ./(2 .* v_0.^2 .- 2 .* v_0 .+ 1) #Initial vote for Consensus makers
 v_g₀= (1 .- v_0).^2 ./ (2 .*v_0.^2 .- 2 .* v_0 .+ 1) #Initial vote for Gridlockers
 
@@ -60,37 +61,8 @@ function unpack(u)
 end
 
 #Construct laplacian in 2D
-function laplacian(U)
-    L = similar(U)
-    # Wrap around for periodic boundary conditions
-    for i in 1:Nx, j in 1:Ny
-        ip1 = mod(i, Nx) + 1  
-        im1 = mod(i - 2, Nx) + 1
-        jp1 = mod(j, Ny) + 1
-        jm1 = mod(j - 2, Ny) + 1
-        L[i, j] = (U[ip1, j] + U[im1, j] + U[i, jp1] + U[i, jm1] - 4U[i, j]) / dx^2
-    end
-    return L
-end
-#Gradient function
-function Gradient(u, dx, dy)
-    Nx, Ny = size(u)
-    T = eltype(u)
-    grad_x = zeros(T, Nx, Ny)
-    grad_y = zeros(T, Nx, Ny)
-    #Boundary conditions are handled by the mod functions
-    for i in 1:Nx, j in 1:Ny
-        ip1 = mod(i, Nx) + 1
-        im1 = mod(i-2, Nx) + 1
-        jp1 = mod(j, Ny) + 1
-        jm1 = mod(j-2, Ny) + 1
-        #Central difference for interior points
-        grad_x[i,j] = (u[ip1,j] - u[im1,j])/(2dx)
-        grad_y[i,j] = (u[i,jp1] - u[i,jm1])/(2dy)
-    end
 
-    return grad_x, grad_y
-end
+#Gradient function
 
 # Compute the sum of votes in the N, S, E, W directions for a focal node (i, j)
 # v: 2D array of votes, i: row index, j: column index
@@ -111,10 +83,10 @@ Fitness_z1(v) = (1 .- cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 1
 Fitness_z2(v) = (1 .+ cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 2
 
 #Economic Utility functions 
-Utility_c(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_c(v)
-Utility_g(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_g(v)
-Utility_z1(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover)) .+ (1-λ).*Fitness_z1(v)
-Utility_z2(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_z2(v)
+Utility_c(v, positive_spillover) = λ .* ((1-s-tax)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_c(v)
+Utility_g(v, positive_spillover) = λ .* ((1-s-tax)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_g(v)
+Utility_z1(v, positive_spillover) = λ .* ((1-s-tax)*v+(s/4)*(positive_spillover)) .+ (1-λ).*Fitness_z1(v)
+Utility_z2(v, positive_spillover) = λ .* ((1-s-tax)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_z2(v)
 
 # Initial condition
 u0 = pack(c₀, g₀, z1₀, z2₀, v_c₀, v_g₀)
@@ -140,15 +112,15 @@ function rd_system!(du, u, p, t)
     u_z2  = [Utility_z2(v[i, j], spillover_v[i, j]) for i in 1:Nx, j in 1:Ny]
 
     # PDE, Laplacian + replicator. Distant movement added at the end
-    du_c  = D_c .* laplacian(c) .+ (c .* g .* (F_c .- F_g)  .+ c .* z .* (F_c .- F_z)  .+ c .* z2 .* (F_c .- F_z2))
-    du_g  = D_g .* laplacian(g) .+ (g .* c .* (F_g .- F_c)  .+ g .* z .* (F_g .- F_z)  .+ g .* z2 .* (F_g .- F_z2))
-    du_z  = D_z .* laplacian(z) .+ (z .* c .* (F_z .- F_c)  .+ z .* g .* (F_z .- F_g))
-    du_z2 = D_z2 .* laplacian(z2) .+ (z2 .* c .* (F_z2 .- F_c) .+ z2 .* g .* (F_z2 .- F_g))
+    du_c  = (c .* g .* (F_c .- F_g)  .+ c .* z .* (F_c .- F_z)  .+ c .* z2 .* (F_c .- F_z2))
+    du_g  = (g .* c .* (F_g .- F_c)  .+ g .* z .* (F_g .- F_z)  .+ g .* z2 .* (F_g .- F_z2))
+    du_z  = (z .* c .* (F_z .- F_c)  .+ z .* g .* (F_z .- F_g))
+    du_z2 = (z2 .* c .* (F_z2 .- F_c) .+ z2 .* g .* (F_z2 .- F_g))
 
     # Movement for c: each cell moves to the cell j
     T = eltype(c)
-    move_gain = zeros(T, Nx, Ny)
-    move_loss = zeros(T, Nx, Ny)
+    move_gain_c = zeros(T, Nx, Ny)
+    move_loss_c = zeros(T, Nx, Ny)
     for i1 in 1:Nx, j1 in 1:Ny
         Fi = F_c[i1, j1]
         maxval = zero(T)
@@ -157,26 +129,19 @@ function rd_system!(du, u, p, t)
             if i1 == i2 && j1 == j2
                 continue
             end
-            dx2 = 1#(X[i1,j1] - X[i2,j2])^2 + (Y[i1,j1] - Y[i2,j2])^2
-            # avoid division by zero
+            dx2 = 1#(X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
             if dx2 == 0
                 continue
             end
-            val = (F_c[i2, j2] - Fi) / dx2
-            if val > maxval
-                maxval = val
-                maxi, maxj = i2, j2
-            end
-        end
-        if maxval > 0
-            flux = m_c * maxval * c[i1, j1]
-            move_loss[i1, j1] += flux
-            move_gain[maxi, maxj] += flux
+            val = exp(F_c[i2, j2] - Fi) / dx2
+            flux = m_c * val * c[i1, j1]
+            move_loss_c[i1, j1] += flux
+            move_gain_c[i2, j2] += flux
         end
     end
 
     # Apply movement to du_c (gain minus loss)
-    du_c .= du_c .+ (move_gain .- move_loss)
+    du_c .= du_c .+ (move_gain_c .- move_loss_c)
 
     # Movement for g 
     move_gain_g = zeros(T, Nx, Ny)
@@ -193,16 +158,10 @@ function rd_system!(du, u, p, t)
             if dx2 == 0
                 continue
             end
-            val = (F_g[i2, j2] - Fi) / dx2
-            if val > maxval
-                maxval = val
-                maxi, maxj = i2, j2
-            end
-        end
-        if maxval > 0
-            flux = m_g * maxval * g[i1, j1]
+            val = exp(F_g[i2, j2] - Fi) / dx2
+            flux = m_g * val * g[i1, j1]
             move_loss_g[i1, j1] += flux
-            move_gain_g[maxi, maxj] += flux
+            move_gain_g[i2, j2] += flux
         end
     end
     du_g .= du_g .+ (move_gain_g .- move_loss_g)
@@ -222,16 +181,10 @@ function rd_system!(du, u, p, t)
             if dx2 == 0
                 continue
             end
-            val = (F_z[i2, j2] - Fi) / dx2
-            if val > maxval
-                maxval = val
-                maxi, maxj = i2, j2
-            end
-        end
-        if maxval > 0
-            flux = m_z * maxval * z[i1, j1]
+            val = exp(F_z[i2, j2] - Fi) / dx2
+            flux = m_z * val * z[i1, j1]
             move_loss_z[i1, j1] += flux
-            move_gain_z[maxi, maxj] += flux
+            move_gain_z[i2, j2] += flux
         end
     end
     du_z .= du_z .+ m_z .* (move_gain_z .- move_loss_z)
@@ -250,16 +203,10 @@ function rd_system!(du, u, p, t)
             if dx2 == 0
                 continue
             end
-            val = (F_z2[i2, j2] - Fi) / dx2
-            if val > maxval
-                maxval = val
-                maxi, maxj = i2, j2
-            end
-        end
-        if maxval > 0
-            flux = m_z2 * maxval * z2[i1, j1]
+            val = exp(F_z2[i2, j2] - Fi) / dx2
+            flux = m_z2 * val * z2[i1, j1]
             move_loss_z2[i1, j1] += flux
-            move_gain_z2[maxi, maxj] += flux
+            move_gain_z2[i2, j2] += flux
         end
     end
     du_z2 .= du_z2 .+ (move_gain_z2 .- move_loss_z2)
@@ -272,7 +219,7 @@ function rd_system!(du, u, p, t)
 end
 
 problem = ODEProblem(rd_system!, u0, tspan)
-sol = solve(problem, RadauIIA5(), saveat=0.01, reltol=1e-12, abstol=1e-12)
+sol = solve(problem, saveat=0.01)#), reltol=1e-12, abstol=1e-12)
 
 ## HEATMAPS
 fontsize=14
@@ -294,17 +241,17 @@ p5 = heatmap(x, y, heatmap_population',  aspect_ratio=1,colorbar=false, clims=cl
 p6 = heatmap(x, y, v',  aspect_ratio=1,color=:viridis, colorbar=false, clims=clims) # clims=climscolor=:balance,
 heatmap_figure = plot(p1, p2, p3, p4, p5, p6, layout=(3,3), size=(1400, 1500),colorbar=true, titlefontsize=fontsize, guidefontsize=fontsize, tickfontsize=fontsize, plot_title="Solutions at final time $tfinal")
 display(plot(p1, axis=false, framestyle=:none,ticks=false, size=(625, 625))) #Consensus makers
-savefig("7DistantMovement_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("DistantMovement_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p2, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Gridlockers
-savefig("7DistantMovement_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("DistantMovement_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p3, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 1
-savefig("7DistantMovement_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("DistantMovement_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p4, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 2
-savefig("7DistantMovement_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("DistantMovement_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p5, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Population
-savefig("7DistantMovement_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("DistantMovement_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p6, axis=false, framestyle=:none, ticks=false, size=(625,625))) #Vote
-savefig("7DistantMovement_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("DistantMovement_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(heatmap_figure)#savefig("Heatmap_Clean_DifferentD_EvenIC_Finaltime=$tfinal.pdf")
 
 # TIME SERIES: Compute averages over the domain at each time step
@@ -322,7 +269,7 @@ average_v = [mean(unpack(sol[i])[5]) .* mean(unpack(sol[i])[1])  .+ mean(unpack(
 # Above computes c*v_c + g*v_g + z at each time step
 # Plot averages
 time_series = plot(time_steps, average_c, xlabel="Time", ylabel="Mean",lw=8, xlabelfontsize=20, ylabelfontsize=20,
-     titlefontsize=12, legendfontsize=12, tickfontsize=16, yticks=0:0.25:1.1, xticks=0:5:tfinal, ylim=(0,1), xlim=(0,tfinal), legend=false) #, label="Mean Consensus Makers"
+     titlefontsize=12, legendfontsize=12, tickfontsize=16, yticks=0:0.25:1.1, xticks=0:100:tfinal, ylim=(0,1), xlim=(0,tfinal), legend=false) #, label="Mean Consensus Makers"
 plot!(time_steps, average_g,lw=8)
 plot!(time_steps, average_z,lw=8)
 plot!(time_steps, average_z2,lw=8)
@@ -331,5 +278,5 @@ plot!(time_steps, average_v,lw=8)
 # plot!(time_steps, average_Fitness_z2,lw=8)
 #plot!(time_steps, ts_max_pop, label="Max Population",lw=3)
 display(time_series)
-savefig("DistantMovement_TimeSeries_,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("NewDistantMovement_TimeSeries_,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 end

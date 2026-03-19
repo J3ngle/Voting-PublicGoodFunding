@@ -1,8 +1,8 @@
 using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, ColorSchemes, SparseArrays
 @time begin
 # Parameters for computations
-D_i= 0
-M_i = 1e-3
+D_i= 1e-2
+M_i = 1e-2
 D_c = D_i #0.1#1e-0 #Diffusion Coefficient for Consensus makers
 D_g = D_i #1e-13 #3 #Diffusion Coefficient for Gridlockers
 D_z = D_i #0.1#1e-0 #Diffusion Coefficient for Zealots
@@ -11,16 +11,15 @@ m_c = M_i #1e-10 # #Migration rate for Consensus makers
 m_g =  M_i# #Migration rate for Gridlockers
 m_z =  M_i #1e-0 # #Migration rate for Zealots Party 1
 m_z2 = M_i# #Migration rate for Zealots Party 2
-λ= 0 #Economic preference
-s= 0 #Spillovers to the other neighbours
-tau = 0
+λ= 1 #Economic preference
+s= 0.8 #Spillovers to the other neighbours
 L = 10 #Length of domain     
 Nx, Ny = 10, 10 #Number of discretization points in either direction
 dx = L / (Nx - 1) #Chop up x equally
 dy = L / (Ny - 1) #Chop up y equally
 x = range(0, L, length=Nx) # X size
 y = range(0, L, length=Ny) # y size 
-tfinal=25.0 #Final time
+tfinal=1000.0 #Final time
 X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
 
 #Initial distribution/ conditions
@@ -28,11 +27,11 @@ N=Nx #Size  of the domian, to place strategies
 c₀ = rand(N,N) #initial random distribution for Consensus makers
 #c₀ = clamp.(c₀, 0, .1) #Control the bounds of initial conditions
 g₀ = rand(N,N) #initial random distribution for Gridlockers
-g₀ = clamp.(g₀, 0, 0.2) #Control the bounds of initial conditions, we can change these around to see what will happen
+g₀ = clamp.(g₀, 0, 0.05) #Control the bounds of initial conditions, we can change these around to see what will happen
 z1₀ = rand(N,N) #initial random distribution for Zealots Party 1
 #z1₀ = clamp.(z1₀, 0, 0.1) #Control the bounds of initial conditions, we can change these around to see what will happen
 z2₀ = rand(N,N)  #initial random distribution for Zealots Party 2
-z2₀ = clamp.(z2₀, 0, 0.04) #Control the bounds of initial conditions, we can change these around to see what will happen
+#z2₀ = clamp.(z2₀, 0, 0.05) #Control the bounds of initial conditions, we can change these around to see what will happen
 τ= c₀ .+ g₀ .+ z1₀ .+ z2₀ #Sum of populations
 c₀=c₀ ./ τ #Normalize initial conditions
 g₀=g₀ ./ τ
@@ -111,10 +110,10 @@ Fitness_z1(v) = (1 .- cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 1
 Fitness_z2(v) = (1 .+ cos.(pi .* v)) ./2 #Strategy fitness for Zealots party 2
 
 #Economic Utility functions 
-Utility_c(v, positive_spillover) = λ .* ((1-s-tau)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_c(v)
-Utility_g(v, positive_spillover) = λ .* ((1-s-tau)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_g(v)
-Utility_z1(v, positive_spillover) = λ .* ((1-s-tau)*v+(s/4)*(positive_spillover)) .+ (1-λ).*Fitness_z1(v)
-Utility_z2(v, positive_spillover) = λ .* ((1-s-tau)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_z2(v)
+Utility_c(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_c(v)
+Utility_g(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_g(v)
+Utility_z1(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover)) .+ (1-λ).*Fitness_z1(v)
+Utility_z2(v, positive_spillover) = λ .* ((1-s)*v+(s/4)*(positive_spillover))  .+ (1-λ).*Fitness_z2(v)
 
 # Initial condition
 u0 = pack(c₀, g₀, z1₀, z2₀, v_c₀, v_g₀)
@@ -185,7 +184,7 @@ du0 = zeros(size(u0))
 
 DAEfunc = ODEFunction(DAE!, mass_matrix = M)
 prob = ODEProblem(DAEfunc, u0, tspan)
-sol = solve(prob, RadauIIA5(), saveat=0.01, reltol=1e-12, abstol=1e-12) #Different solvers:RadauIIA5,Rodas5P,Rodas4,ROS34PW2,ROS34PW3,Trapezoid
+sol = solve(prob, RadauIIA5(), saveat=0.01,reltol=1e-12, abstol=1e-12) #Different solvers:RadauIIA5,Rodas5P,Rodas4,ROS34PW2,ROS34PW3,Trapezoid
 
 # HEATMAPS: Plot results at final time 
 fontsize=14
@@ -207,23 +206,23 @@ p5 = heatmap(x, y, heatmap_population',  aspect_ratio=1,colorbar=false, clims=cl
 p6 = heatmap(x, y, v',  aspect_ratio=1,color=:viridis, colorbar=false, clims=clims) # clims=climscolor=:balance,
 heatmap_figure = plot(p1, p2, p3, p4, p5, p6, layout=(3,3), size=(1400, 1500),colorbar=true, titlefontsize=fontsize, guidefontsize=fontsize, tickfontsize=fontsize, plot_title="Solutions at final time $tfinal")
 display(plot(p1, axis=false, framestyle=:none,ticks=false, size=(625, 625))) #Consensus makers
-#savefig("LocalMovementHeat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("7MixingMovementHeat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Spillovers_Heat_ConsensusMakers,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p2, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Gridlockers
-#savefig("LocalMovementHeat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("7MixingMovementHeat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Spillovers_Heat_Gridlockers,Nx=$Nx,Dg=$D_g,M_g=$m_g,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p3, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 1
-#savefig("LocalMovementHeat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("7MixingMovementHeat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Spillovers_Heat_Zealots1,Nx=$Nx,Dz1=$D_z,M_z1=$m_z,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p4, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Zealots of party 2
-#savefig("LocalMovementHeat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("7MixingMovementHeat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Spillovers_Heat_Zealots2,Nx=$Nx,Dz2=$D_z2,M_z2=$m_z2,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p5, axis=false, framestyle=:none, ticks=false,size=(625, 625))) #Population
-#savefig("LocalMovementHeat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("7MixingMovementHeat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Spillovers_Heat_Population,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(plot(p6, axis=false, framestyle=:none, ticks=false, size=(625,625))) #Vote
-#savefig("LocalMovementHeat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
-#savefig("Heat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("7MixingMovementHeat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+#savefig("Spillovers_Heat_Vote,Nx=$Nx,Dc=$D_c,M_c=$m_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 display(heatmap_figure)#savefig("Heatmap_Clean_DifferentD_EvenIC_Finaltime=$tfinal.pdf")
 
 # TIME SERIES: Compute averages over the domain at each time step
@@ -241,7 +240,7 @@ average_v = [mean(unpack(sol[i])[5]) .* mean(unpack(sol[i])[1])  .+ mean(unpack(
 # Above computes c*v_c + g*v_g + z at each time step
 # Plot averages
 time_series = plot(time_steps, average_c, xlabel="Time", ylabel="Mean",lw=8, xlabelfontsize=20, ylabelfontsize=20,
-     titlefontsize=12, legendfontsize=12, tickfontsize=16,ylim=(0,1.1), yticks=0:0.25:1.1, xticks=0:5:tfinal, xlim=(0,tfinal), legend=false) #, label="Mean Consensus Makers"
+     titlefontsize=12, legendfontsize=12, tickfontsize=16,ylim=(0,1.1), yticks=0:0.25:1.1, xticks=0:100:tfinal, xlim=(0,tfinal), legend=false) #, label="Mean Consensus Makers"
 plot!(time_steps, average_g,lw=8)
 plot!(time_steps, average_z,lw=8)
 plot!(time_steps, average_z2,lw=8)
@@ -250,7 +249,7 @@ plot!(time_steps, average_v,lw=8)
 # plot!(time_steps, average_Fitness_z2,lw=8)
 #plot!(time_steps, ts_max_pop, label="Max Population",lw=3)
 display(time_series)
-savefig("MixingMovement_TimeSeries_tau=$tau,M_c=$m_c,D_c=$D_c,lambda=$λ,s=$s,T=$tfinal.pdf")
+savefig("TESTDifSpillovers_TimeSeries_,M_c=$m_c,D_c=$D_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 #savefig("1Spillover_TimeSeries_M_c=$m_c,D_c=$D_c,lambda=$λ,s=$s,T=$tfinal.pdf")
 #savefig("TimeSeriesConsensusT=$tfinal.pdf")
 #Sanity check: Plot the average v over time
