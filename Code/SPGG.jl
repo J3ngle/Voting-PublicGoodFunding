@@ -120,33 +120,31 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
         #     du_pop .+= M.*(mean(pop) .- pop) #Equivalent to (1/L^2)∑ i(j,k)-i(x,y)
         # end
         
-        # ## 2.) Directed movement — factorised mean-field sums, Voters can move anywhere
-        # for (pop, U, du_pop) in (
-        #         (c,  U_c,  du_c),
-        #         (g,  U_g,  du_g),
-        #         (z1, U_z1, du_z1),
-        #         (z2, U_z2, du_z2))
-        #     eU  = exp.(κ .* U)
-        #     emU = inv.(eU)                       
-        #     Sw  = dot(vec(pop), vec(emU))         
-        #     Se  = sum(eU)                        
-        #     du_pop .+= M .* (eU .* Sw .- pop .* emU .* Se) 
-        # end
-
-
-    # # 3.) Directed movement divided by distance
+        ## 2.) Directed movement — factorised mean-field sums, Voters can move anywhere
         for (pop, U, du_pop) in (
                 (c,  U_c,  du_c),
                 (g,  U_g,  du_g),
                 (z1, U_z1, du_z1),
                 (z2, U_z2, du_z2))
             eU  = exp.(κ .* U)
-            emU = inv.(eU)
-            Sw  = reshape(invDist * vec(pop .* emU), L, L)   # Sw[i,j] = Σ_k pop[k]*emU[k] / dist((i,j),k)
-            Se  = reshape(invDist * vec(eU), L, L)   # Se[i,j] = Σ_k eU[k] / dist((i,j),k)
-            du_pop .+= M .* (eU .* Sw .- pop .* emU .* Se)
+            emU = inv.(eU)                       
+            Sw  = dot(vec(pop), vec(emU))         
+            Se  = sum(eU)                        
+            du_pop .+= M .* (eU .* Sw .- pop .* emU .* Se) 
         end
 
+    # # # 3.) Directed movement divided by distance
+    #     for (pop, U, du_pop) in (
+    #             (c,  U_c,  du_c),
+    #             (g,  U_g,  du_g),
+    #             (z1, U_z1, du_z1),
+    #             (z2, U_z2, du_z2))
+    #         eU  = exp.(κ .* U)
+    #         emU = inv.(eU)
+    #         Sw  = reshape(invDist * vec(pop .* emU), L, L)   # Sw[i,j] = Σ_k pop[k]*emU[k] / dist((i,j),k)
+    #         Se  = reshape(invDist * vec(eU), L, L)   # Se[i,j] = Σ_k eU[k] / dist((i,j),k)
+    #         du_pop .+= M .* (eU .* Sw .- pop .* emU .* Se)
+    #     end
 
         # #  4.) Directed distant movement (Population dependent) — Gravity model
         # P_total = c + g + z1 + z2   # computed once at time step t, reused for all four populations
