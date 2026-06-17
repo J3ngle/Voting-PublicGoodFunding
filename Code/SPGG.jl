@@ -5,13 +5,17 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
     λ = 0 # Economic preference
     s = 0 # Spillovers
     tax = 0 # 0.2 Taxes
-    L = 20 # Length of domain
+    L = 5 # Length of domain
     M = 0.05 #0.05/L^2, Good
     x = range(0, L, length=L) # X size
     y = range(0, L, length=L) # y size 
     tfinal = 10000.0 # Final time
     X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
-
+    # Precompute Euclidean distance squaredbetween every pair of grid nodes.
+    Xv, Yv  = vec(X), vec(Y)                                 
+    Dist    = (Xv .- Xv') .^ 2 .+ (Yv .- Yv') .^ 2      
+    invDist = inv.(Dist)                                      
+    invDist[diagind(invDist)] .= 0.0  #Distance from a node to itself is set to zero, Good                        
     #Initial conditions
     c₀ = rand(L,L) # Initial distribution for Consensus-makers
     g₀ = rand(L,L) # Initial distribution for Gridlockers
@@ -129,45 +133,21 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
         #     du_pop .+= M .* (eU .* Sw .- pop .* emU .* Se) 
         # end
 
-        # # 3.) Undirected movement divided by distance
-        # for (pop, du_pop) in (
-        #         (c,  du_c),
-        #         (g,  du_g),
-        #         (z1, du_z1),
-        #         (z2, du_z2))
-        #     flux = zeros(L, L)
-        #     for i in 1:L, j in 1:L
-        #         for ni in 1:L, nj in 1:L
-        #             if ni == i && nj == j
-        #                 continue
-        #             end
-        #             dist2 = (ni - i)^2 + (nj - j)^2
-        #             flux[i, j] += (pop[ni, nj] - pop[i, j]) / dist2
-        #         end
-        #     end
-        #     du_pop .+= M .* flux
-        # end
-    # # 3.) Undirected movement divided by distance
+
+    # # 3.) Directed movement divided by distance
         for (pop, U, du_pop) in (
                 (c,  U_c,  du_c),
                 (g,  U_g,  du_g),
                 (z1, U_z1, du_z1),
                 (z2, U_z2, du_z2))
-            flux = zeros(L, L)
-            for i in 1:L, j in 1:L
-                for ni in 1:L, nj in 1:L
-                    if ni == i && nj == j
-                        continue
-                    end
-                    dist2 = (ni - i)^2 + (nj - j)^2
-                    # migration from (i,j) to (ni,nj)
-                    w_in  = exp(κ * (U[ni,nj] - U[i,j])) / dist2
-                    w_out = exp(κ * (U[i,j] - U[ni,nj])) / dist2
-                    flux[i,j] += pop[ni,nj] * w_in - pop[i,j]   * w_out
-                end
-            end
-            du_pop .+= M .* flux
+            eU  = exp.(κ .* U)
+            emU = inv.(eU)
+            Sw  = reshape(invDist * vec(pop .* emU), L, L)   # Sw[i,j] = Σ_k pop[k]*emU[k] / dist((i,j),k)
+            Se  = reshape(invDist * vec(eU), L, L)   # Se[i,j] = Σ_k eU[k] / dist((i,j),k)
+            du_pop .+= M .* (eU .* Sw .- pop .* emU .* Se)
         end
+
+
         # #  4.) Directed distant movement (Population dependent) — Gravity model
         # P_total = c + g + z1 + z2   # computed once at time step t, reused for all four populations
         #  for (pop, U, du_pop) in (
