@@ -1,7 +1,7 @@
 using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, ColorSchemes
 @time begin
     # Parameters
-    κ = 1 # 1 for directed, 0 for undirected
+    κ = 0 # 1 for directed, 0 for undirected
     λ = 0 # Economic preference
     s = 0 # Spillovers
     tax = 0 # 0.2 Taxes
