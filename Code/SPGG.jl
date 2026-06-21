@@ -13,7 +13,7 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
     X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
     # Precompute Euclidean distance squaredbetween every pair of grid nodes.
     Xv, Yv  = vec(X), vec(Y)                                 
-    Dist    = (Xv .- Xv') .^ 2 .+ (Yv .- Yv') .^ 2      
+    Dist    = (Xv .- Xv') .^ 2 .+ (Yv .- Yv') .^ 2 
     invDist = inv.(Dist)                                      
     invDist[diagind(invDist)] .= 0  #Distance from a node to itself is set to zero, Good 
     Z =1/sum(invDist)  #Normalization factor for Distance Dependent movement, Good                     
@@ -28,7 +28,7 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
     c₀ = c₀ ./ total
     g₀ = g₀ ./ total
     z1₀ = z1₀ ./ total
-    z2₀ = z2₀ ./ total
+    z2₀ = z2₀ ./ total 
     v₀ = 0.5 * c₀ .+ 0.5 * g₀ .+ z1₀ #Initial vote
     vc₀ = (v₀ .^ 2) ./ (2 .* v₀ .^ 2 .- 2 .* v₀ .+ 1) # Initial vote for Consensus-makers, Good
     vg₀ = ((1 .- v₀) .^ 2) ./ (2 .* v₀ .^ 2 .- 2 .* v₀ .+ 1) # Initial vote for Gridlockers, Good
