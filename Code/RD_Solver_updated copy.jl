@@ -1,15 +1,15 @@
 using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, ColorSchemes
 @time begin
     # Parameters
-    κ = 0
-    λ = 0 # Economic preference
+    κ = 1
+    λ = 1 # Economic preference
     s = 0 # Spillovers
     tax = 0 # 0.2 Taxes
-    L = 120 # Length of domain
+    L = 20 # Length of domain
     M = 0.05/L^2
     x = range(0, L, length=L) # X size
     y = range(0, L, length=L) # y size 
-    tfinal = 10000.0 # Final time
+    tfinal = 20000.0 # Final time
     X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
 
     #Initial conditions
@@ -59,6 +59,7 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
     # v: 2D array of votes, i: row index, j: column index
     # Returns the sum of the four neighbors (with periodic boundary conditions)
     function positive_spillover(v, i, j)
+        spill = 
         ip1 = mod(i, L) + 1  #Spillover from the South neighbor
         im1 = mod(i - 2, L) + 1  #Spillover from the North neighbor
         jp1 = mod(j, L) + 1  #Spillover from the East neighbor
@@ -153,31 +154,29 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
          # O(L²) movement — factorised mean-field sums
 # net[i] = M*(exp(κU[i])·Sw − pop[i]·exp(−κU[i])·Se)
 # Sw = Σⱼ pop[j]·exp(−κU[j]),  Se = Σⱼ exp(κU[j])
-for (pop, U, du_pop) in (
-        (c,  U_c,  du_c),
-        (g,  U_g,  du_g),
-        (z1, U_z1, du_z1),
-        (z2, U_z2, du_z2))
-    eU  = exp.(κ .* U)
-    emU = inv.(eU)                        # exp.(−κ .* U), no second exp pass
-    Sw  = dot(vec(pop), vec(emU))         # scalar
-    Se  = sum(eU)                         # scalar
-    du_pop .+= M .* (eU .* Sw .- pop .* emU .* Se)
-end
-
-# Code for gravity model
-# P_total = c + g + z1 + z2   # computed once, reused for all four populations
 # for (pop, U, du_pop) in (
 #         (c,  U_c,  du_c),
 #         (g,  U_g,  du_g),
 #         (z1, U_z1, du_z1),
 #         (z2, U_z2, du_z2))
-#     eU = exp.(κ * U)
-#     emU = 1.0 ./ eU
-#     Sw  = dot(vec(pop),       vec(emU))   # Σ pop·exp(−κU)
-#     Swp = dot(vec(P_total), vec(eU))    # Σ P_total·exp(κU)
-#     du_pop .+= (M / L^2) .* (eU .* P_total .* Sw .- pop .* emU .* Swp)
+#     eU  = exp.(κ .* U)
+#     emU = inv.(eU)                        # exp.(−κ .* U), no second exp pass
+#     Sw  = dot(vec(pop), vec(emU))         # scalar
+#     Se  = sum(eU)                         # scalar
+#     du_pop .+= M .* (eU .* Sw .- pop .* emU .* Se)
 # end
+P_total = c + g + z1 + z2   # computed once, reused for all four populations
+for (pop, U, du_pop) in (
+        (c,  U_c,  du_c),
+        (g,  U_g,  du_g),
+        (z1, U_z1, du_z1),
+        (z2, U_z2, du_z2))
+    eU = exp.(κ * U)
+    emU = 1.0 ./ eU
+    Sw  = dot(vec(pop),       vec(emU))   # Σ pop·exp(−κU)
+    Swp = dot(vec(P_total), vec(eU))    # Σ P_total·exp(κU)
+    du_pop .+= (M / L^2) .* (eU .* P_total .* Sw .- pop .* emU .* Swp)
+end
 
         # algebraic dynamics for v_c, v_g
         du_vc = (1 .- vc) .* v .^ 2 .- vc .* (1 .- v) .^ 2
@@ -210,17 +209,17 @@ end
     p6 = heatmap(x, y, v', aspect_ratio=1, color=:viridis, colorbar=false, clims=clims) # clims=climscolor=:balance,
     heatmap_figure = plot(p1, p2, p3, p4, p5, p6, layout=(3, 3), size=(1400, 1500), colorbar=true, titlefontsize=fontsize, guidefontsize=fontsize, tickfontsize=fontsize, plot_title="Solutions at final time $tfinal")
     display(plot(p1, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Consensus makers
-    savefig("HM_c,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_c,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p2, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Gridlockers
-    savefig("HM_g,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_g,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p3, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Zealots of party 1
-    savefig("HM_z1,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_z1,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p4, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Zealots of party 2
-    savefig("HM_z2,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_z2,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p5, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Population
-    savefig("HM_p,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_p,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p6, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Vote
-    savefig("HM_v,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_v,kappa=$κ,lambda=$λ,s=$s.png")
     display(heatmap_figure)#savefig("Heatmap_Clean_DifferentD_EvenIC_Finaltime=$tfinal.pdf")
 
     # TIME SERIES: Compute averages over the domain at each time step
@@ -248,6 +247,6 @@ end
     # plot!(time_steps, average_Fitness_z2,lw=8)
     #plot!(time_steps, ts_max_pop, label="Max Population",lw=3)
     display(time_series)
-    savefig("TS,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,TS,kappa=$κ,lambda=$λ,s=$s.png")
 end
 #xticks=0:1000:tfinal
