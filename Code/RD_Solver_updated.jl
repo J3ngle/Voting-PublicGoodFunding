@@ -234,7 +234,7 @@ end
     average_Fitness_c = [mean(f_c(unpack(sol[i])[5])) for i in 1:length(time_steps)]
     average_Fitness_g = [mean(f_g(unpack(sol[i])[5])) for i in 1:length(time_steps)]
     #ts_max_pop = [maximum(unpack(sol[i])[1]) + maximum(unpack(sol[i])[2]) + maximum(unpack(sol[i])[3]) + maximum(unpack(sol[i])[4]) for i in 1:length(time_steps)]
-    average_v = [mean(unpack(sol[i])[5].*unpack(sol[i])[1]) .+ mean(unpack(sol[i])[2].*unpack(sol[i])[6]) .+ mean(unpack(sol[i])[3]) for i in 1:length(time_steps)]
+    average_v = [mean(unpack(sol[i])[5]) .* mean(unpack(sol[i])[1]) .+ mean(unpack(sol[i])[2]) .* mean(unpack(sol[i])[6]) .+ mean(unpack(sol[i])[3]) .+ mean(unpack(sol[i])[4]) for i in 1:length(time_steps)]
     # Above computes c*v_c + g*v_g + z at each time step
     # Plot averages
     time_series = plot(time_steps[2:end], average_c[2:end], xlabel="Time", ylabel="Mean", lw=8, xlabelfontsize=20, ylabelfontsize=20, xscale=:log10,
