@@ -1,15 +1,15 @@
 using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, ColorSchemes
 @time begin
     # Parameters
-    κ = 0
-    λ = 0 # Economic preference
+    κ = 1
+    λ = 1 # Economic preference
     s = 0 # Spillovers
     tax = 0 # 0.2 Taxes
-    L = 120 # Length of domain
+    L = 20 # Length of domain
     M = 0.05/L^2
     x = range(0, L, length=L) # X size
     y = range(0, L, length=L) # y size 
-    tfinal = 10000.0 # Final time
+    tfinal = 20000.0 # Final time
     X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
 
     #Initial conditions
@@ -59,6 +59,7 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
     # v: 2D array of votes, i: row index, j: column index
     # Returns the sum of the four neighbors (with periodic boundary conditions)
     function positive_spillover(v, i, j)
+        spill = 
         ip1 = mod(i, L) + 1  #Spillover from the South neighbor
         im1 = mod(i - 2, L) + 1  #Spillover from the North neighbor
         jp1 = mod(j, L) + 1  #Spillover from the East neighbor
@@ -73,10 +74,10 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
     f_z2(v) = (1 .+ cos.(pi .* v)) ./ 2 #Strategy fitness for Zealots party 2
 
     # Utility functions 
-    u_c(v, positive_spillover) = λ .* ((1 - s ) * v + (s / 4) * (positive_spillover)) .+ (1 - λ) .* f_c(v)
-    u_g(v, positive_spillover) = λ .* ((1 - s ) * v + (s / 4) * (positive_spillover)) .+ (1 - λ) .* f_g(v)
-    u_z1(v, positive_spillover) = λ .* ((1 - s ) * v + (s / 4) * (positive_spillover)) .+ (1 - λ) .* f_z1(v)
-    u_z2(v, positive_spillover) = λ .* ((1 - s ) * v + (s / 4) * (positive_spillover)) .+ (1 - λ) .* f_z2(v)
+    u_c(v, positive_spillover) = λ .* ((1 - s - tax) * v + (s / 4) * (positive_spillover)) .+ (1 - λ) .* f_c(v)
+    u_g(v, positive_spillover) = λ .* ((1 - s - tax) * v + (s / 4) * (positive_spillover)) .+ (1 - λ) .* f_g(v)
+    u_z1(v, positive_spillover) = λ .* ((1 - s - tax) * v + (s / 4) * (positive_spillover)) .+ (1 - λ) .* f_z1(v)
+    u_z2(v, positive_spillover) = λ .* ((1 - s - tax) * v + (s / 4) * (positive_spillover)) .+ (1 - λ) .* f_z2(v)
 
     # Initial condition
     u0 = pack(c₀, g₀, z1₀, z2₀, vc₀, vg₀)
@@ -107,76 +108,75 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
         du_z1 = z1 .* c .* (F_z1 .- F_c) .+ z1 .* g .* (F_z1 .- F_g)
         du_z2 = z2 .* c .* (F_z2 .- F_c) .+ z2 .* g .* (F_z2 .- F_g)
 
-        # Movement for c: each cell moves to the cell j
-        T = eltype(c)
-        move_gain_c = zeros(T, L, L)
-        move_loss_c = zeros(T, L, L)
-        for i1 in 1:L, j1 in 1:L
-            Ui = U_c[i1, j1]
-            for i2 in 1:L, j2 in 1:L
-                if i1 == i2 && j1 == j2
-                    continue
-                end
-                dx2 = 1#(X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
-                flux = M * c[i1, j1] * exp(κ*(U_c[i2, j2] - Ui)) / dx2
-                move_loss_c[i1, j1] += flux
-                move_gain_c[i2, j2] += flux
-            end
-        end
+        # # Movement gain and loss
+        move_gain_c = zeros(L, L)
+        move_loss_c = zeros(L, L)
+        move_gain_g = zeros(L, L)
+        move_loss_g = zeros(L, L)
+        move_gain_z1 = zeros(L, L)
+        move_loss_z1 = zeros(L, L)
+        move_gain_z2 = zeros(L, L)
+        move_loss_z2 = zeros(L, L)
 
-        # Apply movement to du_c (gain minus loss)
-        du_c .= du_c .+ move_gain_c .- move_loss_c
+        # for i1 in 1:L, j1 in 1:L
+        #     Uci = U_c[i1, j1]
+        #     Ugi = U_g[i1, j1]
+        #     Uz1i = U_z1[i1, j1]
+        #     Uz2i = U_z2[i1, j1]
 
-        # Movement for g 
-        move_gain_g = zeros(T, L, L)
-        move_loss_g = zeros(T, L, L)
-        for i1 in 1:L, j1 in 1:L
-            Ui = U_g[i1, j1]
-            for i2 in 1:L, j2 in 1:L
-                if i1 == i2 && j1 == j2
-                    continue
-                end
-                dx2 = 1#(X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
-                flux = M * g[i1, j1] * exp(κ*(U_g[i2, j2] - Ui)) / dx2
-                move_loss_g[i1, j1] += flux
-                move_gain_g[i2, j2] += flux
-            end
-        end
-        du_g .= du_g .+ move_gain_g .- move_loss_g
+        #     for i2 in 1:L, j2 in 1:L
+        #         if i1 == i2 && j1 == j2
+        #             continue
+        #         end
+        #         dx2 = c[i2, j2]+g[i2, j2]+z1[i2, j2]+z2[i2, j2]#(X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
+        #         flux_c = M * c[i1, j1] * exp(κ*(U_c[i2, j2] - Uci)) * dx2
+        #         flux_g = M * g[i1, j1] * exp(κ*(U_g[i2, j2] - Ugi)) * dx2
+        #         flux_z1 = M * z1[i1, j1] * exp(κ*(U_z1[i2, j2] - Uz1i)) * dx2
+        #         flux_z2 = M * z2[i1, j1] * exp(κ*(U_z2[i2, j2] - Uz2i)) * dx2
 
-        # Movement for z (zealots 1)
-        move_gain_z1 = zeros(T, L, L)
-        move_loss_z1 = zeros(T, L, L)
-        for i1 in 1:L, j1 in 1:L
-            Ui = U_z1[i1, j1]
-            for i2 in 1:L, j2 in 1:L
-                if i1 == i2 && j1 == j2
-                    continue
-                end
-                dx2 = 1#(X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
-                flux =  M * z1[i1, j1] * exp(κ*(U_z1[i2, j2] - Ui)) / dx2
-                move_loss_z1[i1, j1] += flux
-                move_gain_z1[i2, j2] += flux
-            end
-        end
-        du_z1 .= du_z1 .+ move_gain_z1 .- move_loss_z1
+        #         move_loss_c[i1, j1] += flux_c
+        #         move_gain_c[i2, j2] += flux_c
+        #         move_loss_g[i1, j1] += flux_g
+        #         move_gain_g[i2, j2] += flux_g
+        #         move_loss_z1[i1, j1] += flux_z1
+        #         move_gain_z1[i2, j2] += flux_z1
+        #         move_loss_z2[i1, j1] += flux_z2
+        #         move_gain_z2[i2, j2] += flux_z2
+        #     end
+        # end
 
-        # Movement for z2 (zealots 2)
-        move_gain_z2 = zeros(T, L, L)
-        move_loss_z2 = zeros(T, L, L)
-        for i1 in 1:L, j1 in 1:L
-            Ui = U_z2[i1, j1]
-            for i2 in 1:L, j2 in 1:L
-                if i1 == i2 && j1 == j2
-                    continue
-                end
-                dx2 = 1#(X[i1, j1] - X[i2, j2])^2 + (Y[i1, j1] - Y[i2, j2])^2
-                flux = M * z2[i1, j1] * exp(κ*(U_z2[i2, j2] - Ui)) / dx2
-                move_loss_z2[i1, j1] += flux
-                move_gain_z2[i2, j2] += flux
-            end
-        end
-        du_z2 .= du_z2 .+ move_gain_z2 .- move_loss_z2
+        # # Apply movement to du_c (gain minus loss)
+        # du_c .= du_c .+ move_gain_c .- move_loss_c
+        # du_g .= du_g .+ move_gain_g .- move_loss_g
+        # du_z1 .= du_z1 .+ move_gain_z1 .- move_loss_z1
+        # du_z2 .= du_z2 .+ move_gain_z2 .- move_loss_z2
+
+         # O(L²) movement — factorised mean-field sums
+# net[i] = M*(exp(κU[i])·Sw − pop[i]·exp(−κU[i])·Se)
+# Sw = Σⱼ pop[j]·exp(−κU[j]),  Se = Σⱼ exp(κU[j])
+# for (pop, U, du_pop) in (
+#         (c,  U_c,  du_c),
+#         (g,  U_g,  du_g),
+#         (z1, U_z1, du_z1),
+#         (z2, U_z2, du_z2))
+#     eU  = exp.(κ .* U)
+#     emU = inv.(eU)                        # exp.(−κ .* U), no second exp pass
+#     Sw  = dot(vec(pop), vec(emU))         # scalar
+#     Se  = sum(eU)                         # scalar
+#     du_pop .+= M .* (eU .* Sw .- pop .* emU .* Se)
+# end
+P_total = c + g + z1 + z2   # computed once, reused for all four populations
+for (pop, U, du_pop) in (
+        (c,  U_c,  du_c),
+        (g,  U_g,  du_g),
+        (z1, U_z1, du_z1),
+        (z2, U_z2, du_z2))
+    eU = exp.(κ * U)
+    emU = 1.0 ./ eU
+    Sw  = dot(vec(pop),       vec(emU))   # Σ pop·exp(−κU)
+    Swp = dot(vec(P_total), vec(eU))    # Σ P_total·exp(κU)
+    du_pop .+= (M / L^2) .* (eU .* P_total .* Sw .- pop .* emU .* Swp)
+end
 
         # algebraic dynamics for v_c, v_g
         du_vc = (1 .- vc) .* v .^ 2 .- vc .* (1 .- v) .^ 2
@@ -209,17 +209,17 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
     p6 = heatmap(x, y, v', aspect_ratio=1, color=:viridis, colorbar=false, clims=clims) # clims=climscolor=:balance,
     heatmap_figure = plot(p1, p2, p3, p4, p5, p6, layout=(3, 3), size=(1400, 1500), colorbar=true, titlefontsize=fontsize, guidefontsize=fontsize, tickfontsize=fontsize, plot_title="Solutions at final time $tfinal")
     display(plot(p1, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Consensus makers
-    savefig("HM_c,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_c,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p2, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Gridlockers
-    savefig("HM_g,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_g,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p3, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Zealots of party 1
-    savefig("HM_z1,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_z1,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p4, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Zealots of party 2
-    savefig("HM_z2,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_z2,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p5, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Population
-    savefig("HM_p,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_p,kappa=$κ,lambda=$λ,s=$s.png")
     display(plot(p6, axis=false, framestyle=:none, ticks=false, size=(625, 625))) #Vote
-    savefig("HM_v,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,HM_v,kappa=$κ,lambda=$λ,s=$s.png")
     display(heatmap_figure)#savefig("Heatmap_Clean_DifferentD_EvenIC_Finaltime=$tfinal.pdf")
 
     # TIME SERIES: Compute averages over the domain at each time step
@@ -233,7 +233,7 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
     average_Fitness_c = [mean(f_c(unpack(sol[i])[5])) for i in 1:length(time_steps)]
     average_Fitness_g = [mean(f_g(unpack(sol[i])[5])) for i in 1:length(time_steps)]
     #ts_max_pop = [maximum(unpack(sol[i])[1]) + maximum(unpack(sol[i])[2]) + maximum(unpack(sol[i])[3]) + maximum(unpack(sol[i])[4]) for i in 1:length(time_steps)]
-    average_v = [mean(unpack(sol[i])[5]) .* mean(unpack(sol[i])[1]) .+ mean(unpack(sol[i])[2]) .* mean(unpack(sol[i])[6]) .+ mean(unpack(sol[i])[3]) .+ mean(unpack(sol[i])[4]) for i in 1:length(time_steps)]
+    average_v = [mean(unpack(sol[i])[5].*unpack(sol[i])[1]) .+ mean(unpack(sol[i])[2].*unpack(sol[i])[6]) .+ mean(unpack(sol[i])[3]) for i in 1:length(time_steps)]
     # Above computes c*v_c + g*v_g + z at each time step
     # Plot averages
     time_series = plot(time_steps[2:end], average_c[2:end], xlabel="Time", ylabel="Mean", lw=8, xlabelfontsize=20, ylabelfontsize=20, xscale=:log10,
@@ -247,6 +247,6 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
     # plot!(time_steps, average_Fitness_z2,lw=8)
     #plot!(time_steps, ts_max_pop, label="Max Population",lw=3)
     display(time_series)
-    savefig("TS,kappa=$κ,lambda=$λ,s=$s.png")
+    savefig("grav,TS,kappa=$κ,lambda=$λ,s=$s.png")
 end
 #xticks=0:1000:tfinal
