@@ -2,16 +2,12 @@ using DifferentialEquations, Plots, LinearAlgebra, Roots, Statistics, Sundials, 
 @time begin
 # Parameters for computations
 D_i= 0
-M_i = 0.001
-D_c = D_i#1e-0 #1e-3 #Diffusion Coefficient for Consensus makers
-D_g = D_i#1e-10 #1e-3 #3 #Diffusion Coefficient for Gridlockers
-D_z = D_i#1e-0 #1e-3 #Diffusion Coefficient for Zealots
-D_z2 = D_i#1e-10 #1e-3 #3 #Diffusion Coefficient for Zealots Party 2
+M_i = 0.01/100
 m_c =  M_i#1e-10 # #Migration rate for Consensus makers
 m_g =  M_i #1e-10 # #Migration rate for Gridlockers
 m_z =  M_i #1e-10 #1e-0 # #Migration rate for Zealots Party 1
 m_z2 =  M_i#1e-10 # #Migration rate for Zealots Party 2
-λ= 1 #Economic preference 
+λ= 0 #Economic preference 
 s= 0 #Spillovers
 tax = 0
 L = 10 #Length of domain    
@@ -20,7 +16,7 @@ dx = L / (Nx - 1) #Chop up x equally
 dy = L / (Ny - 1) #Chop up y equally
 x = range(0, L, length=Nx) # X size
 y = range(0, L, length=Ny) # y size 
-tfinal=1000.0 #Final time
+tfinal=200.0 #Final time
 X, Y = [xi for xi in x, yi in y], [yi for xi in x, yi in y]
 
 #Initial distribution/ conditions
@@ -59,11 +55,6 @@ function unpack(u)
     v_g = reshape(u[5N+1:6N], Nx, Ny)
     return c, g, z, z2, v_c, v_g
 end
-
-#Construct laplacian in 2D
-
-#Gradient function
-
 # Compute the sum of votes in the N, S, E, W directions for a focal node (i, j)
 # v: 2D array of votes, i: row index, j: column index
 # Returns the sum of the four neighbors (with periodic boundary conditions)
@@ -164,7 +155,7 @@ function rd_system!(du, u, p, t)
             move_gain_g[i2, j2] += flux
         end
     end
-    du_g .= du_g .+ (move_gain_g .- move_loss_g)
+    du_g .= du_g .+(move_gain_g .- move_loss_g)
 
     # Movement for z (zealots 1)
     move_gain_z = zeros(T, Nx, Ny)
